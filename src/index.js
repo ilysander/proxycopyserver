@@ -109,27 +109,28 @@ app.all('*', async (req, res)=>{
     // delete req.headers.referer;
 
     const strigBody = JSON.stringify(body);
-
-    console.log('headers:',headers)
     
     const headersClean = {
         ...headers,
-        // host:undefined,
-        // referer:undefined,
-        // 'Content-Type':'application/json'
-        // "Content-Type": "application/json",
-        // 'content-length': undefined,
-
-
-
     }
+
+    delete headersClean["content-length"]
+    delete headersClean["accept-encoding"]
+    delete headersClean["user-agent"]
+    delete headersClean["accept"]
+    delete headersClean["host"]
+    delete headersClean["connection"]
+    delete headersClean["postman-token"]
+    delete headersClean["connection"]
+    delete headersClean["cache-control"]
+    
+    console.log("headersClean: ", headersClean)
 
     const responseRaw =await fetch(url,
             {
                 method,
                 body:body,
-                headers:headersClean,
-                json:true,
+                headers:headersClean
                 // mode: "cors",
                 // cache: "no-cache",
                 // credentials: "same-origin",
@@ -137,11 +138,13 @@ app.all('*', async (req, res)=>{
                 // referrerPolicy: "no-referrer",
                 // gzip:true
             })
-            console.log('responseRaw:',responseData);
-            responseData = await responseRaw.json()
+            console.log("response status: ", responseRaw.status)
+            if (responseData == 200) {
+                responseData = await responseRaw.json()
+            }
     } catch (e) {
-        console.log('no se pudo hacer el fetch =>', url);
-        console.log('error =>', e);
+        console.log('no se pudo hacer el fetch =>', method, url);
+        console.log('error => Http Status',responseRaw. e);
     }
 
     console.log('escribiendo el archivo...')
