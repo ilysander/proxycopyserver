@@ -1,0 +1,24 @@
+{
+    "uri": "/create",
+    "method": "POST",
+    "req": {
+        "headers": {
+            "content-type": "application/json",
+            "user-agent": "PostmanRuntime/7.32.3",
+            "accept": "*/*",
+            "postman-token": "c148e6dd-0304-429a-b254-a97721ae2a4a",
+            "host": "localhost:3000",
+            "accept-encoding": "gzip, deflate, br",
+            "connection": "keep-alive",
+            "content-length": "41"
+        },
+        "body": {
+            "name": "test",
+            "salary": "123",
+            "age": "23"
+        }
+    },
+    "res": {
+        "body": {}
+    }
+}
