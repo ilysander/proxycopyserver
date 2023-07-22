@@ -1,3 +1,4 @@
 src/routes
 node_modules
 src/public
+mock/

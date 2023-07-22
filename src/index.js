@@ -5,22 +5,22 @@ const morgan=require('morgan');
 const {mkdirp} = require('mkdirp');
 const path = require('path');
 const fs = require('fs');
-// const fetch = require('node-fetch')
 
 const config = {
     server:{
-        url:'https://dummy.restapiexample.com/api/v1'
+        url:'https://dummy.restapiexample.com/api/v1',
+        validate:[
+            {
+                name:'/oauth/token',
+                params:['client_id']
+            }
+        ]
     }
 }
-//employees
-//employee/1
-//create
-//update/21
-//delete/2
 
 app.use(bodyParser.json())
-app.use(bodyParser.urlencoded({ extended: false }))
-app.use(express.static(__dirname + '/public'))
+app.use(bodyParser.urlencoded({ extended: true }))
+// app.use(express.static(__dirname + '/public'))
 
 //Configuraciones
 app.set('port', process.env.PORT || 3000);
@@ -28,14 +28,22 @@ app.set('json spaces', 2)
 
 //Middleware
 app.use(morgan('dev'));
-app.use(express.urlencoded({extended:false}));
+app.use(express.urlencoded({extended:true}));
 app.use(express.json());
 
+//routers, no se deben usar
 // app.use('/oauth', require('./routes/auth'));
+// app.use('/credito', require('./routes/credito'));
+// app.use('/cuentas-integradas', require('./routes/cuentas-integradas'));
 // app.use('/documentos', require('./routes/documentos'));
-// app.use('/teclado', require('./routes/teclado'));
 // app.use('/generales', require('./routes/generales'));
 // app.use('/imagen-login', require('./routes/imagen-login'));
+// app.use('/notificaciones', require('./routes/notificaciones'));
+// app.use('/operaciones-frecuentes', require('./routes/operaciones-frecuentes'));
+// app.use('/para-ti', require('./routes/para-ti'));
+// app.use('/perfil', require('./routes/perfil'));
+// app.use('/tarjeta', require('./routes/tarjeta'));
+// app.use('/teclado', require('./routes/teclado'));
 
 
 app.all('*', async (req, res)=>{
@@ -43,8 +51,8 @@ app.all('*', async (req, res)=>{
     //obteniendo los valores del request
     const uri = req.originalUrl;
     const headers = req.headers;
-    const method = (req.method || 'GET').toUpperCase();
-    const body = req.body || {};
+    const method = (req.method || 'POST').toUpperCase();
+    const body = req.body || null;
 
     const url = `${config.server.url}${uri}`;
 
@@ -59,7 +67,7 @@ app.all('*', async (req, res)=>{
 
     const pathBlocks = [];
 
-    uriPath && pathBlocks.push(uriPath);
+    // uriPath && pathBlocks.push(uriPath);
     method &&  pathBlocks.push(method);
 
 
@@ -67,87 +75,101 @@ app.all('*', async (req, res)=>{
     try {
         await mkdirp(globalDir)
     } catch (err) {
-        console.log('No se pudo crear el directorio:'+ globalDir)
+        console.log(`[${uri}]`+'No se pudo crear el directorio:'+ globalDir)
         console.log('error:', err)
     }
-    const jsonPath = pathBlocks.join('_')+'.json';
 
-    const jsonFullPath = getPath(__dirname +'/mock', dir, jsonPath);
-    const existJson = existFile(jsonFullPath);
-
-    if(existJson){
-        console.log('existe el archivo :'+jsonPath)
-    }else{
-        console.log('No existe el archivo:'+jsonPath)
-    }
 
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = 0;
     
-
+    let codeStatus = '';
     // consulta al servicio final 
     let responseData = {}
     try {
 
-    // fetch(
-    //     {
-    //         url,
-    //         method,
-    //         body,
-    //         headers,
-    //         json:true,
-    //         gzip:true,
-    //         strictSSL:false
-    //     },
-    //     (error,response)=>{
-    //         console.log('hay error? ====>',error);
-    //         const responseAny = error && response? error:response;
-    //         responseData = responseAny;
-    //     }
-    // )
-
-    // delete req.headers.host;
-    // delete req.headers.referer;
-
     const strigBody = JSON.stringify(body);
+
+    console.log(`[${uri}]`+"original Header: ", headers)
+
     
     const headersClean = {
         ...headers,
     }
 
     delete headersClean["content-length"]
-    delete headersClean["accept-encoding"]
-    delete headersClean["user-agent"]
-    delete headersClean["accept"]
+    // delete headersClean["accept-encoding"]
+    // delete headersClean["user-agent"]
+    // delete headersClean["accept"]
     delete headersClean["host"]
-    delete headersClean["connection"]
+    // delete headersClean["connection"]
     delete headersClean["postman-token"]
-    delete headersClean["connection"]
-    delete headersClean["cache-control"]
-    
-    console.log("headersClean: ", headersClean)
+    // delete headersClean["connection"]
+    // delete headersClean["cache-control"]
+    delete headersClean["if-none-match"]
 
-    const responseRaw =await fetch(url,
-            {
-                method,
-                body:body,
-                headers:headersClean
-                // mode: "cors",
-                // cache: "no-cache",
-                // credentials: "same-origin",
-                // redirect: "follow",
-                // referrerPolicy: "no-referrer",
-                // gzip:true
-            })
-            console.log("response status: ", responseRaw.status)
-            if (responseData == 200) {
-                responseData = await responseRaw.json()
-            }
-    } catch (e) {
-        console.log('no se pudo hacer el fetch =>', method, url);
-        console.log('error => Http Status',responseRaw. e);
+    //if-none-match
+    
+    console.log(`[${uri}]`+"headersClean: ", headersClean)
+    
+    const paramsFetch = {
+        method,
+        headers:headersClean
+    }
+    if(!!body){
+        let formBody = body;
+        if(headers['content-type'] === 'application/x-www-form-urlencoded'){
+            console.log(`[${uri}] usara URLSearchParams ${JSON.stringify(body)}`)
+            formBody = new URLSearchParams(body);
+        }
+        else{
+            console.log(`[${uri}]`+" usara el json.string normal  ")
+            formBody = JSON.stringify(body);
+            console.log(`[${uri}]  params: `,formBody)
+        }
+    
+        
+        if(method === 'POST'){
+            console.log(`[${uri}]  sera method POST`)
+            paramsFetch.body = formBody;
+        }else{
+            console.log(`[${uri}]  sera method NO POST osea GET, solo no se le agregara body`)
+        }
     }
 
-    console.log('escribiendo el archivo...')
+    const responseRaw =await fetchWithTimeout(url,paramsFetch);
+            // {
+            //     method,
+            //     body:formBody,//:JSON.stringify(body),
+            //     headers:headersClean
+            //     // mode: "cors",
+            //     // cache: "no-cache",
+            //     // credentials: "same-origin",
+            //     // redirect: "follow",
+            //     // referrerPolicy: "no-referrer",
+            //     // gzip:true
+            // })
+            console.log(`[${uri}]`+"responseRaw: %j", responseRaw);
+            console.log(`[${uri}]`+"response status: ", responseRaw.status)
+
+            codeStatus = `${responseRaw.status}`
+            // if (responseRaw.status == 200) {
+                responseData = await responseRaw.json()
+
+                console.log(`[${uri}]`+'sucess => response:',responseData);
+            // }
+        } catch (e) {
+            console.log(`[${uri}]`+'error => error',e);
+            console.log(`[${uri}]`+'no se pudo hacer el fetch =>', method, url);
+            console.log(`[${uri}]`+'error => response:',responseData);
+            if(e.name === 'AbortError'){
+                console.log(`[${uri}]`+'error => abortError'); 
+            }
+    }
+
+    console.log(`[${uri}]`+'escribiendo el archivo...')
+
+    //validate url dentro para reemplazar por el local
+
     
 
     // escritura del archivo
@@ -165,23 +187,47 @@ app.all('*', async (req, res)=>{
         }
     }
     
+
+    if(config.server.validate.length>0){
+
+        for (const validador of config.server.validate) {
+            const {name,params} =  validador;
+            if(uri === name){
+                for (const param of params) {
+                    const valueParam = body[param]
+                    if(!!valueParam){
+                        pathBlocks.push(`&${param}=${valueParam}`);
+                    }
+                }
+            }
+        }
+    }
+
+    !!codeStatus &&  pathBlocks.push(codeStatus);
+
+    const jsonPath = pathBlocks.join('_')+'.json';
+
+    const jsonFullPath = getPath(__dirname +'/mock', dir, jsonPath);
+    const existJson = existFile(jsonFullPath);
+
+    if(existJson){
+        console.log(`[${uri}]`+'existe el archivo :'+jsonPath)
+    }else{
+        console.log(`[${uri}]`+'No existe el archivo:'+jsonPath)
+    }
+
+    let codeStatusDefault = 200;
+
+    if(!!codeStatus){
+        codeStatusDefault = parseInt(codeStatus)
+    }
+    
     fs.writeFileSync(
         jsonFullPath,
         JSON.stringify(dataToWrite,null,4),
         'utf8'
     )
-
-    res.json({
-        uri,
-        method,
-        headers,
-        uriParts,
-        uriDirs,
-        uriPath,
-        dirBlocks,
-        dir,
-        jsonFullPath
-    })
+    res.status(codeStatusDefault).json(responseData);
 })
 
 
@@ -192,6 +238,19 @@ app.listen(app.get('port'),()=>{
 
 function getPath(...dirs){
     return dirs.filter(dir => dir !== '').join(path.sep)
+}
+
+async function fetchWithTimeout(resource, options = {}){
+    const {timeout = 8000} = options;
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeout);
+
+    const response = await fetch(resource,{
+        ...options,
+        signal:controller.signal
+    });
+    clearTimeout(id);
+    return response;
 }
 
 function existFile(path){
