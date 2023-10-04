@@ -8,15 +8,20 @@ const fs = require('fs');
 
 const config = {
     server:{
-        url:'https://dummy.restapiexample.com/api/v1',
+        url:'',
         validate:[
             {
                 name:'/oauth/token',
                 params:['client_id']
             }
+        ],
+        session:[
+            'authorization'
         ]
     }
 }
+
+const isReadFileMode = true
 
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
@@ -32,18 +37,7 @@ app.use(express.urlencoded({extended:true}));
 app.use(express.json());
 
 //routers, no se deben usar
-// app.use('/oauth', require('./routes/auth'));
-// app.use('/credito', require('./routes/credito'));
-// app.use('/cuentas-integradas', require('./routes/cuentas-integradas'));
-// app.use('/documentos', require('./routes/documentos'));
-// app.use('/generales', require('./routes/generales'));
-// app.use('/imagen-login', require('./routes/imagen-login'));
-// app.use('/notificaciones', require('./routes/notificaciones'));
-// app.use('/operaciones-frecuentes', require('./routes/operaciones-frecuentes'));
-// app.use('/para-ti', require('./routes/para-ti'));
-// app.use('/perfil', require('./routes/perfil'));
-// app.use('/tarjeta', require('./routes/tarjeta'));
-// app.use('/teclado', require('./routes/teclado'));
+
 
 
 app.all('*', async (req, res)=>{
@@ -72,6 +66,26 @@ app.all('*', async (req, res)=>{
 
 
     const globalDir = getPath(__dirname+'/mock', dir)
+
+
+    if(isReadFileMode){
+        let resCode = 200
+        let resData = {}
+
+        //let hasDataRequest = false;
+
+        let dataRequest = getData(dir,uri,method,body);
+        if(dataRequest!=null){
+            resCode = dataRequest.resCode;
+            resData = dataRequest.resData;
+
+            res.status(resCode).json(resData);
+            return;
+        }else{
+            return res.status(400).json({});
+        }
+    }
+
     try {
         await mkdirp(globalDir)
     } catch (err) {
@@ -260,4 +274,55 @@ function existFile(path){
     } catch (err) {
         return false;
     }
+}
+
+function getData(dir,uri,method,body){
+    let dataRequest =  null;
+    const pathBlocks = []
+    method &&  pathBlocks.push(method);
+
+
+    if(config.server.validate.length>0){
+
+        for (const validador of config.server.validate) {
+            const {name,params} =  validador;
+            if(uri === name){
+                for (const param of params) {
+                    const valueParam = body[param]
+                    if(!!valueParam){
+                        pathBlocks.push(`&${param}=${valueParam}`);
+                    }
+                }
+            }
+        }
+    }
+
+    pathBlocks.push(200);
+
+    const jsonPath = pathBlocks.join('_')+'.json';
+
+    const jsonFullPath = getPath(__dirname +'/mock', dir, jsonPath);
+    const existJson = existFile(jsonFullPath);
+
+    if(existJson){
+        try {
+            
+            const data = require(jsonFullPath);
+            console.log("data encontrada :",data);
+
+            const dataFile = fs.readFileSync(jsonFullPath, 'utf8');
+            const dataJson = JSON.parse(dataFile);
+            console.log("data dataJson convertida :",dataJson);
+            dataRequest = {}
+            dataRequest.resCode = 200
+            dataRequest.resData = dataJson.res.body
+
+        } catch (error) {
+            dataRequest = null
+            console.warn("no se pudo leer el archivo:",jsonPath)
+            console.warn("err:",error)
+        }
+    }
+
+    return dataRequest;
 }
