@@ -13,6 +13,10 @@ const config = {
             {
                 name:'/oauth/token',
                 params:['client_id']
+            },
+            {
+                name:'/gestion-tarjetas/tarjeta-credito/movimientos',
+                params:['initialMovement']
             }
         ],
         session:[
