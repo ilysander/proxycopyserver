@@ -48,6 +48,7 @@ app.all('*', async (req, res)=>{
 
     //obteniendo los valores del request
     const uri = req.originalUrl;
+    console.log(`original url:${uri}`)
     const headers = req.headers;
     const method = (req.method || 'POST').toUpperCase();
     const body = req.body || null;
@@ -75,39 +76,62 @@ app.all('*', async (req, res)=>{
     if(isReadFileMode){
         let resCode = 200
         let resData = {}
+        let contentType = 'application/json'; // Valor por defecto
 
         //let hasDataRequest = false;
 
         let dataRequest = getData(dir,uri,method,body);
         if(dataRequest!=null){
+            // resCode = dataRequest.resCode;
+            // resData = dataRequest.resData;
+
+            // res.status(resCode).json(resData);
+            // return;
             resCode = dataRequest.resCode;
             resData = dataRequest.resData;
 
-            res.status(resCode).json(resData);
-            return;
+            // Verifica si se guardó un tipo de contenido específico en los headers
+            const savedHeaders = dataRequest.res.headers;
+            if (savedHeaders && savedHeaders['content-type']) {
+                contentType = savedHeaders['content-type'];
+            }
+
+            // Si es JSON, usa res.json, de lo contrario usa res.send
+            res.setHeader('Content-Type', contentType);
+            if (contentType.includes('application/json')) {
+                return setTimeout(() => {
+                    return res.status(parseInt(resCode)).json(resData);
+                }, dataRequest.res.responseTime || 0);
+            } else {
+                return res.status(parseInt(resCode)).send(resData);
+            }
         }else{
             return res.status(400).json({});
         }
     }
-
     try {
         await mkdirp(globalDir)
     } catch (err) {
         console.log(`[${uri}]`+'No se pudo crear el directorio:'+ globalDir)
         console.log('error:', err)
     }
-
-
+    
+    
     process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = 0;
     
+    const startTime = Date.now(); // Empezamos a medir el tiempo
     let codeStatus = '';
     // consulta al servicio final 
     let responseData = {}
+    let responseHeaders = {};
+    let contentType;
+    let responseTime = 0;
+
     try {
 
     const strigBody = JSON.stringify(body);
 
-    console.log(`[${uri}]`+"original Header: ", headers)
+    // console.log(`[${uri}]`+"original Header: ", headers)
 
     
     const headersClean = {
@@ -127,7 +151,7 @@ app.all('*', async (req, res)=>{
 
     //if-none-match
     
-    console.log(`[${uri}]`+"headersClean: ", headersClean)
+    // console.log(`[${uri}]`+"headersClean: ", headersClean)
     
     const paramsFetch = {
         method,
@@ -155,6 +179,8 @@ app.all('*', async (req, res)=>{
     }
 
     const responseRaw =await fetchWithTimeout(url,paramsFetch);
+    const endTime = Date.now(); // Terminamos de medir el tiempo
+    responseTime = endTime - startTime; // Tiempo en milisegundos
             // {
             //     method,
             //     body:formBody,//:JSON.stringify(body),
@@ -166,12 +192,31 @@ app.all('*', async (req, res)=>{
             //     // referrerPolicy: "no-referrer",
             //     // gzip:true
             // })
-            console.log(`[${uri}]`+"responseRaw: %j", responseRaw);
+            // console.log(`[${uri}]`+"responseRaw: %j", responseRaw);
             console.log(`[${uri}]`+"response status: ", responseRaw.status)
+            // responseHeaders = responseRaw.headers
+
+            responseRaw.headers.forEach((value, key) => {
+                responseHeaders[key] = value;
+            });
 
             codeStatus = `${responseRaw.status}`
-            // if (responseRaw.status == 200) {
-                responseData = await responseRaw.json()
+                // responseData = await responseRaw.json()
+                contentType = responseRaw.headers.get('content-type');
+
+                if (contentType && contentType.includes('application/json')) {
+                    // Si es JSON, procesa como JSON
+                    responseData = await responseRaw.json();
+                    console.log(`[${uri}] JSON response:`, responseData);
+                } else if (contentType && contentType.includes('text/html')) {
+                    // Si es HTML, procesa como texto
+                    responseData = await responseRaw.text();
+                    console.log(`[${uri}] HTML response:`, responseData);
+                } else {
+                    // Si es otro tipo de respuesta (como archivos, etc.)
+                    responseData = await responseRaw.text();
+                    console.log(`[${uri}] Other content-type response:`, responseData);
+                }
 
                 console.log(`[${uri}]`+'sucess => response:',responseData);
             // }
@@ -199,9 +244,10 @@ app.all('*', async (req, res)=>{
             body
         },
         res:{
-            statusCode:responseData.statusCode,
-            headers:responseData.headers,
+            statusCode:codeStatus,
+            headers:responseHeaders,
             body:responseData,
+            responseTime:responseTime
         }
     }
     
@@ -245,7 +291,12 @@ app.all('*', async (req, res)=>{
         JSON.stringify(dataToWrite,null,4),
         'utf8'
     )
-    res.status(codeStatusDefault).json(responseData);
+       // Si es JSON, usa res.json, de lo contrario usa res.send
+       if (contentType && contentType.includes('application/json')) {
+        res.status(parseInt(codeStatus)).json(responseData);
+    } else {
+        res.status(parseInt(codeStatus)).send(responseData);
+    }
 })
 
 
@@ -259,6 +310,7 @@ function getPath(...dirs){
 }
 
 async function fetchWithTimeout(resource, options = {}){
+    console.log('llanandoooo:',options)
     const {timeout = 8000} = options;
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -301,32 +353,47 @@ function getData(dir,uri,method,body){
         }
     }
 
-    pathBlocks.push(200);
+    // Primero intenta con el código 200
+    const jsonPath200 = `${pathBlocks.join('_')}_200.json`;
+    const jsonFullPath200 = getPath(__dirname + '/mock', dir, jsonPath200);
 
-    const jsonPath = pathBlocks.join('_')+'.json';
+    if (existFile(jsonFullPath200)) {
+        // Si encuentra la respuesta con código 200
+        return readDataFromFile(jsonFullPath200, 200);
+    }
 
-    const jsonFullPath = getPath(__dirname +'/mock', dir, jsonPath);
-    const existJson = existFile(jsonFullPath);
+    // Si no encuentra el archivo con código 200, busca cualquier otro archivo en el directorio
+    const filesInDir = fs.readdirSync(path.join(__dirname, 'mock', dir));
+    
+    for (const file of filesInDir) {
+        if (file.endsWith('.json')) {
+            const jsonFullPath = path.join(__dirname, 'mock', dir, file);
+            const statusCode = parseInt(file.split('_').pop().replace('.json', ''));
 
-    if(existJson){
-        try {
-            
-            const data = require(jsonFullPath);
-            console.log("data encontrada :",data);
-
-            const dataFile = fs.readFileSync(jsonFullPath, 'utf8');
-            const dataJson = JSON.parse(dataFile);
-            console.log("data dataJson convertida :",dataJson);
-            dataRequest = {}
-            dataRequest.resCode = 200
-            dataRequest.resData = dataJson.res.body
-
-        } catch (error) {
-            dataRequest = null
-            console.warn("no se pudo leer el archivo:",jsonPath)
-            console.warn("err:",error)
+            return readDataFromFile(jsonFullPath, statusCode);
         }
     }
 
-    return dataRequest;
+    console.warn("No se encontró ningún archivo en el directorio.");
+    return null;
+}
+
+// Función para leer los datos del archivo
+function readDataFromFile(filePath, statusCode) {
+    try {
+        const dataFile = fs.readFileSync(filePath, 'utf8');
+        const dataJson = JSON.parse(dataFile);
+
+        console.log(`Data encontrada para ${statusCode}:`, dataJson);
+
+        return {
+            resCode: statusCode,
+            resData: dataJson.res.body,
+            res: dataJson.res
+        };
+    } catch (error) {
+        console.warn(`No se pudo leer el archivo: ${filePath}`);
+        console.warn("Error:", error);
+        return null;
+    }
 }
