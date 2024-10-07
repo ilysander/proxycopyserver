@@ -48,7 +48,8 @@ app.all('*', async (req, res)=>{
 
     //obteniendo los valores del request
     const uri = req.originalUrl;
-    console.log(`original url:${uri}`)
+    // console.log(`GET ${uri}`)
+    console.log(`[c] ${uri}`)
     const headers = req.headers;
     const method = (req.method || 'POST').toUpperCase();
     const body = req.body || null;
@@ -102,6 +103,10 @@ app.all('*', async (req, res)=>{
                 return setTimeout(() => {
                     return res.status(parseInt(resCode)).json(resData);
                 }, dataRequest.res.responseTime || 0);
+            } else if (!!dataRequest.res.htmlFilePath)  {
+                 // Si hay un archivo HTML, lo servimos
+                 const htmlContentSaved = fs.readFileSync(dataRequest.res.htmlFilePath, 'utf8');
+                return res.status(parseInt(resCode)).send(htmlContentSaved);
             } else {
                 return res.status(parseInt(resCode)).send(resData);
             }
@@ -126,6 +131,9 @@ app.all('*', async (req, res)=>{
     let responseHeaders = {};
     let contentType;
     let responseTime = 0;
+    let isHtml = false;
+    let isResourceHtml = false;
+    // let htmlContent = '';
 
     try {
 
@@ -166,7 +174,7 @@ app.all('*', async (req, res)=>{
         else{
             console.log(`[${uri}]`+" usara el json.string normal  ")
             formBody = JSON.stringify(body);
-            console.log(`[${uri}]  params: `,formBody)
+            // console.log(`[${uri}]  params: `,formBody)
         }
     
         
@@ -211,14 +219,20 @@ app.all('*', async (req, res)=>{
                 } else if (contentType && contentType.includes('text/html')) {
                     // Si es HTML, procesa como texto
                     responseData = await responseRaw.text();
-                    console.log(`[${uri}] HTML response:`, responseData);
+                    isHtml = true;
+                    isResourceHtml=true;
+                    // htmlContent = await responseRaw.text(); // Capturamos el HTML
+                    // console.log(`[${uri}] HTML response:`, responseData);
+                } else if (contentType && (contentType.includes('javascript') || contentType.includes('text/css'))){
+                    isResourceHtml=  true;
+                    responseData = await responseRaw.text();
                 } else {
                     // Si es otro tipo de respuesta (como archivos, etc.)
                     responseData = await responseRaw.text();
-                    console.log(`[${uri}] Other content-type response:`, responseData);
+                    // console.log(`[${uri}] Other content-type response:`, responseData);
                 }
 
-                console.log(`[${uri}]`+'sucess => response:',responseData);
+                // console.log(`[${uri}]`+'sucess => response:',responseData);
             // }
         } catch (e) {
             console.log(`[${uri}]`+'error => error',e);
@@ -246,8 +260,9 @@ app.all('*', async (req, res)=>{
         res:{
             statusCode:codeStatus,
             headers:responseHeaders,
-            body:responseData,
-            responseTime:responseTime
+            responseTime:responseTime,
+            htmlFilePath:undefined,
+            body:isResourceHtml?'':responseData
         }
     }
     
@@ -279,13 +294,34 @@ app.all('*', async (req, res)=>{
     }else{
         console.log(`[${uri}]`+'No existe el archivo:'+jsonPath)
     }
-
-    let codeStatusDefault = 200;
-
-    if(!!codeStatus){
-        codeStatusDefault = parseInt(codeStatus)
-    }
     
+    // if (isHtml) {
+    //     const htmlPath = pathBlocks.join('_')+'.html';
+    //     const htmlFilePath = getPath(__dirname + '/mock', dir,htmlPath);
+    //     fs.writeFileSync(htmlFilePath, responseData, 'utf8');
+    //     // Actualizamos el archivo JSON con la referencia al HTML
+    //     dataToWrite.res.htmlFilePath = htmlFilePath;
+    // }
+
+    if(isResourceHtml){
+        let formatFileToSave = 'html'
+        if(isHtml){
+            formatFileToSave = 'html'
+        }else{
+            const partsUri = uri.split('.');
+            if(partsUri.length>1){
+                formatFileToSave = partsUri[partsUri.length-1];
+            }else{
+                //si no cumple con nada, lo guardamos como html
+
+            }
+        }
+        const htmlPath = pathBlocks.join('_')+'.'+formatFileToSave;
+        const htmlFilePath = getPath(__dirname + '/mock', dir,htmlPath);
+        fs.writeFileSync(htmlFilePath, responseData, 'utf8');
+        // Actualizamos el archivo JSON con la referencia al HTML
+        dataToWrite.res.htmlFilePath = htmlFilePath;
+    }
     fs.writeFileSync(
         jsonFullPath,
         JSON.stringify(dataToWrite,null,4),
@@ -310,7 +346,7 @@ function getPath(...dirs){
 }
 
 async function fetchWithTimeout(resource, options = {}){
-    console.log('llanandoooo:',options)
+    // console.log('llanandoooo:',options)
     const {timeout = 8000} = options;
     const controller = new AbortController();
     const id = setTimeout(() => controller.abort(), timeout);
@@ -384,7 +420,7 @@ function readDataFromFile(filePath, statusCode) {
         const dataFile = fs.readFileSync(filePath, 'utf8');
         const dataJson = JSON.parse(dataFile);
 
-        console.log(`Data encontrada para ${statusCode}:`, dataJson);
+        // console.log(`Data encontrada para ${statusCode}:`, dataJson);
 
         return {
             resCode: statusCode,
