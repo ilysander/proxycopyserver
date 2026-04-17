@@ -1,5 +1,25 @@
-src/routes
-node_modules
-src/public
-mock/
+# Dependencies
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+
+# Build outputs
+backend/dist/
+frontend/.next/
+frontend/out/
+
+# Config & cache (runtime-generated, do not commit)
+backend/config.json
+backend/mock/
+
+# Environment
+.env
+.env.local
+frontend/.env.local
+
+# OS
 .DS_Store
+
+# Logs
+*.log
+npm-debug.log*
