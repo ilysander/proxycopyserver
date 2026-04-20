@@ -23,7 +23,7 @@ app.use('/api', configRoutes);
 
 // Proxy catch-all — only intercepts traffic under /proxy/*
 // This avoids any conflict with /api/* or any future own routes.
-app.all('/proxy/*path', (req, res) => {
+app.all('/proxy/*', (req, res) => {
   handleProxyRequest(req, res).catch((err) => {
     console.error('[server] Unhandled proxy error:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -36,5 +36,5 @@ const port = app.get('port') as number;
 app.listen(port, () => {
   console.log(`\n🚀 ProxyCopyServer  →  http://localhost:${port}`);
   console.log(`   Proxy endpoint   →  http://localhost:${port}/proxy/<your-path>`);
-  console.log(`🎛️  Config panel    →  http://localhost:3001\n`);
+  console.log(`🎛️  Config panel    →  check frontend/.env.local for its port\n`);
 });

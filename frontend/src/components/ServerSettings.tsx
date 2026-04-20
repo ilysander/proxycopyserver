@@ -42,7 +42,9 @@ export default function ServerSettings({ config, onSave }: Props) {
         <span style={{ color: 'var(--accent)', fontSize: 16 }}>🔗</span>
         <span style={{ color: 'var(--text-2)' }}>
           Point your client at&nbsp;
-          <code style={{ color: 'var(--accent)' }}>http://localhost:3000/proxy/&lt;your-path&gt;</code>
+          <code style={{ color: 'var(--accent)' }}>
+            {process.env.NEXT_PUBLIC_PROXY_URL ?? 'http://localhost:3000/proxy'}/&lt;your-path&gt;
+          </code>
         </span>
       </div>
 

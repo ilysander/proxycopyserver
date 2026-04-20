@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'crypto';
 import { mkdirp } from 'mkdirp';
 import { getConfig, getHostname, MOCK_DIR } from './config';
 import { getPath, existFile, fetchWithTimeout } from './utils';
@@ -10,6 +11,29 @@ import type { CachedResponse, GetDataResult, ValidateRule } from './types';
 
 /** The URL prefix this server listens on for proxy traffic */
 const PROXY_PREFIX = '/proxy';
+
+/** Max filename length before we hash it (macOS limit is 255 bytes per component) */
+const MAX_FILENAME = 200;
+
+/**
+ * Derives the cache filename PREFIX (without status suffix) from a set of path blocks.
+ *
+ * If the full name would exceed MAX_FILENAME chars, the block string is hashed with MD5
+ * so both WRITE and READ always produce the same key for the same input.
+ *
+ * Write: `${filePrefix(blocks)}_${status}.json`
+ * Read:  look for `${filePrefix(blocks)}_*.json`
+ */
+function filePrefix(blocks: string[]): string {
+  const base = blocks.join('_');
+  // +8 for _200.json worst case
+  if (base.length + 8 <= MAX_FILENAME) return base;
+
+  const method = blocks[0]; // e.g. "GET"
+  const hash   = createHash('md5').update(base).digest('hex').slice(0, 10);
+  console.warn(`[proxy] Filename too long (${base.length} chars) — using hash prefix: ${method}_${hash}`);
+  return `${method}_${hash}`;
+}
 
 // ─── URI helpers ──────────────────────────────────────────────────────────────
 
@@ -126,15 +150,15 @@ function findCacheFile(
   dir: string,
   blocks: string[]
 ): GetDataResult | null {
-  const prefix  = blocks.join('_');
+  const prefix  = filePrefix(blocks);   // ← same hash logic as write path
   const dirPath = path.join(MOCK_DIR, hostname, dir);
   if (!existFile(dirPath)) return null;
 
-  // 1. Try exact prefix + _200
+  // 1. Try prefix + _200 (happy path)
   const path200 = path.join(dirPath, `${prefix}_200.json`);
   if (existFile(path200)) return readDataFromFile(path200, 200);
 
-  // 2. Try exact prefix + any status
+  // 2. Try prefix + any status
   try {
     const match = fs.readdirSync(dirPath)
       .find(f => f.endsWith('.json') && f.startsWith(`${prefix}_`));
@@ -228,10 +252,37 @@ export async function handleProxyRequest(req: Request, res: Response): Promise<v
     const cached = getCachedData(hostname, dir, uriPath, rawQuery, method, body);
 
     if (!cached) {
+      // ── Log the miss to ___errors___ for post-analysis ──────────────────────
+      try {
+        const errDir = getPath(MOCK_DIR, hostname, '___errors___');
+        await mkdirp(errDir);
+
+        // Build a short, readable filename: timestamp_METHOD_path-segment.json
+        const ts       = new Date().toISOString().replace(/[:.]/g, '-');
+        const pathSlug = uriPath.replace(/\//g, '_').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 60);
+        const errFile  = getPath(errDir, `${ts}_${method}_${pathSlug}.json`);
+
+        fs.writeFileSync(errFile, JSON.stringify({
+          _note:     'Cache miss — request was not found in mock/ folder',
+          timestamp: new Date().toISOString(),
+          method,
+          uri:       realUri,
+          uriPath,
+          rawQuery,
+          queryParams: Object.fromEntries(new URLSearchParams(rawQuery)),
+          body,
+          lookupDir: getPath(MOCK_DIR, hostname, dir),
+        }, null, 2), 'utf8');
+
+        console.warn(`[proxy] CACHE MISS → logged to ___errors___/${ts}_${method}_${pathSlug}.json`);
+      } catch (logErr) {
+        console.error('[proxy] Failed to write miss log:', logErr);
+      }
+
       res.status(404).json({
         error: 'No cached response found',
-        uri: realUri,
-        hint: 'Switch to Proxy Mode to capture this response, or enable fallback on the validate rule.',
+        uri:   realUri,
+        hint:  'Check mock/___errors___/ for details. Switch to Proxy Mode to capture this response.',
       });
       return;
     }
@@ -280,10 +331,16 @@ export async function handleProxyRequest(req: Request, res: Response): Promise<v
 
   try {
     const headersClean = { ...headers };
-    delete headersClean['content-length'];
-    delete headersClean['host'];
-    delete headersClean['postman-token'];
+    // ── Never forward hop-by-hop or connection-management headers ────────────
+    delete headersClean['content-length'];    // recalculated by fetch
+    delete headersClean['host'];              // must match upstream, not proxy
+    delete headersClean['postman-token'];     // postman artifact
+    // ── Prevent compression Node.js can't decompress (zstd) ─────────────────
+    // Let undici/Node negotiate its own Accept-Encoding (gzip, br — both supported)
+    delete headersClean['accept-encoding'];
+    // ── Prevent 304 Not Modified responses (empty body → json() crash) ───────
     delete headersClean['if-none-match'];
+    delete headersClean['if-modified-since'];
 
     const fetchOptions: RequestInit = { method, headers: headersClean };
 
@@ -313,7 +370,9 @@ export async function handleProxyRequest(req: Request, res: Response): Promise<v
 
   // ── Write cache ────────────────────────────────────────────────────────────
   const pathBlocks = buildPathBlocks(uriPath, rawQuery, method, body);
-  pathBlocks.push(codeStatus);
+  // pathBlocks still has method + params; filePrefix handles the length limit
+  const prefix  = filePrefix(pathBlocks);
+  const fileKey = `${prefix}_${codeStatus}`;
 
   const dataToWrite: CachedResponse = {
     uri: realUri,
@@ -334,14 +393,19 @@ export async function handleProxyRequest(req: Request, res: Response): Promise<v
       const parts = uriPath.split('.');
       if (parts.length > 1) ext = parts[parts.length - 1];
     }
-    const htmlFilePath = getPath(MOCK_DIR, hostname, dir, `${pathBlocks.join('_')}.${ext}`);
+    const htmlFilePath = getPath(MOCK_DIR, hostname, dir, `${fileKey}.${ext}`);
     fs.writeFileSync(htmlFilePath, responseData as string, 'utf8');
     dataToWrite.res.htmlFilePath = htmlFilePath;
   }
 
-  const jsonFullPath = getPath(MOCK_DIR, hostname, dir, `${pathBlocks.join('_')}.json`);
-  fs.writeFileSync(jsonFullPath, JSON.stringify(dataToWrite, null, 4), 'utf8');
-  console.log('[proxy] Cached →', jsonFullPath.replace(MOCK_DIR + path.sep, 'mock/'));
+  const jsonFullPath = getPath(MOCK_DIR, hostname, dir, `${fileKey}.json`);
+  try {
+    fs.writeFileSync(jsonFullPath, JSON.stringify(dataToWrite, null, 4), 'utf8');
+    console.log('[proxy] Cached →', jsonFullPath.replace(MOCK_DIR + path.sep, 'mock/'));
+  } catch (writeErr) {
+    console.error('[proxy] Failed to write cache file:', writeErr);
+    // Still send the response even if caching fails
+  }
 
   contentType.includes('application/json')
     ? res.status(parseInt(codeStatus)).json(responseData)

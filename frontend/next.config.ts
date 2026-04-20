@@ -2,8 +2,8 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   /**
-   * Proxy /api/* requests to the Express backend (port 3000) so the browser
-   * never makes cross-origin requests and we avoid CORS issues entirely.
+   * Proxy /api/* requests to the Express backend so the browser
+   * never makes cross-origin requests (no CORS issues).
    */
   async rewrites() {
     return [

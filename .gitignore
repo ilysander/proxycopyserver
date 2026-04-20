@@ -12,10 +12,12 @@ frontend/out/
 backend/config.json
 backend/mock/
 
-# Environment
-.env
-.env.local
-frontend/.env.local
+# Environment (local overrides — do NOT commit)
+# .env
+# .env.local
+# backend/.env
+# frontend/.env.local
+# .env.example files ARE committed (schema reference)
 
 # OS
 .DS_Store

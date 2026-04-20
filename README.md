@@ -223,19 +223,40 @@ HTML, CSS, and JS assets are stored as companion files; the JSON holds a referen
 
 ---
 
-## Environment variables
+## Changing ports
 
-### Backend (`backend/.env`)
+Edit the env files — no code changes needed.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT`   | `3000`  | Port for the Express server |
+### Backend — `backend/.env`
 
-### Frontend (`frontend/.env.local`)
+```bash
+PORT=3000   # change to any free port, e.g. 4500
+```
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `BACKEND_URL` | `http://localhost:3000` | Backend URL used by Next.js to proxy `/api/*` requests |
+### Frontend — `frontend/.env.local`
+
+```bash
+PORT=3001                                    # Next.js panel port
+
+BACKEND_URL=http://localhost:3000            # must match backend PORT
+NEXT_PUBLIC_PROXY_URL=http://localhost:3000/proxy   # shown in the UI hint
+```
+
+**Example: run both on non-default ports**
+
+```bash
+# backend/.env
+PORT=4500
+
+# frontend/.env.local
+PORT=4501
+BACKEND_URL=http://localhost:4500
+NEXT_PUBLIC_PROXY_URL=http://localhost:4500/proxy
+```
+
+Then `npm run dev` — everything picks up from the env files automatically. No `--port` flags needed.
+
+> `.env.example` and `.env.local.example` in each workspace show the full schema (safe to commit — do not contain real values).
 
 ---
 
@@ -243,6 +264,6 @@ HTML, CSS, and JS assets are stored as companion files; the JSON holds a referen
 
 | Layer | Tech |
 |---|---|
-| Backend | Node.js 18+, Express 4, TypeScript 5, tsx |
+| Backend | Node.js 20+, Express 4, TypeScript 5, tsx |
 | Frontend | Next.js 15+, React 19, TypeScript 5 |
 | Design | Custom dark glassmorphism (no CSS framework) |
