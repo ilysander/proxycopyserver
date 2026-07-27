@@ -1,0 +1,23 @@
+{
+  "servers": {
+    "default": {
+      "url": "https://api.example.com",
+      "readFileMode": true,
+      "validate": [
+        {
+          "name": "/oauth/token",
+          "params": ["client_id"],
+          "queryParams": [],
+          "fallback": false
+        },
+        {
+          "name": "/api/users",
+          "params": [],
+          "queryParams": ["page", "status"],
+          "fallback": true
+        }
+      ],
+      "session": ["authorization"]
+    }
+  }
+}
