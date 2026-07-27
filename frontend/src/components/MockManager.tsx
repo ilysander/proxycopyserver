@@ -3,7 +3,11 @@
 import { useState, useCallback, useEffect } from 'react';
 import { mockApi, type MockFileEntry } from '@/lib/api';
 
+import { type AppConfig } from '@/lib/api';
+
 interface Props {
+  config: AppConfig;
+  targetTag: string;
   onToast: (msg: string, type?: 'success' | 'error') => void;
 }
 
@@ -33,7 +37,7 @@ function groupByHostname(files: MockFileEntry[]): Record<string, MockFileEntry[]
   }, {});
 }
 
-export default function MockManager({ onToast }: Props) {
+export default function MockManager({ config, targetTag, onToast }: Props) {
   const [files,    setFiles]    = useState<MockFileEntry[]>([]);
   const [total,    setTotal]    = useState(0);
   const [loading,  setLoading]  = useState(true);

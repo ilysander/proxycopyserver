@@ -24,11 +24,34 @@ export default function ConfigDashboard() {
   const [loading, setLoading]   = useState(true);
   const [status, setStatus]     = useState<'online' | 'offline' | 'checking'>('checking');
   const [toast, setToast]       = useState<Toast | null>(null);
+  const [targetTag, setTargetTag] = useState<string>('default');
 
   const showToast = useCallback((message: string, type: Toast['type'] = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   }, []);
+
+  const handleAddTag = () => {
+    const newTag = prompt('Enter new tag name (e.g. auth, payments):');
+    if (!newTag || !newTag.trim()) return;
+    const tag = newTag.trim().toLowerCase();
+    
+    if (config?.servers[tag]) {
+      showToast(`Tag '${tag}' already exists`, 'error');
+      return;
+    }
+
+    const nextConfig = {
+      ...config,
+      servers: {
+        ...config?.servers,
+        [tag]: { url: '', readFileMode: true, validate: [], session: ['authorization'] }
+      }
+    } as AppConfig;
+    
+    handleConfigChange(nextConfig);
+    setTargetTag(tag);
+  };
 
   const loadConfig = useCallback(async () => {
     try {
@@ -92,19 +115,40 @@ export default function ConfigDashboard() {
             </div>
           </div>
 
-          {/* Mode banner */}
+          {/* Mode banner and Tag Selector */}
           {config && (() => {
+            const currentServer = config.servers[targetTag] || config.servers['default'];
             const hostname = (() => {
-              if (!config.server.url) return null;
-              try { return new URL(config.server.url).hostname; } catch { return null; }
+              if (!currentServer?.url) return null;
+              try { return new URL(currentServer.url).hostname; } catch { return null; }
             })();
             return (
-              <div className={`mode-banner ${config.server.readFileMode ? 'cache-mode' : 'proxy-mode'}`}
-                   style={{ marginTop: 20 }}>
-                <span style={{ fontSize: 18 }}>{config.server.readFileMode ? '💾' : '🔀'}</span>
-                {config.server.readFileMode
-                  ? <>Cache Mode — reading from <code style={{ marginLeft: 4 }}>mock/{hostname ?? '_default'}/</code></>
-                  : `Proxy Mode — forwarding to ${config.server.url || '(no URL set)'}`}
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 24, marginBottom: 12 }}>
+                  <label style={{ fontSize: 14, fontWeight: 600, color: 'var(--text-2)' }}>Current Target:</label>
+                  <select
+                    className="input"
+                    style={{ width: 'auto', minWidth: 200, padding: '8px 12px' }}
+                    value={targetTag}
+                    onChange={e => setTargetTag(e.target.value)}
+                  >
+                    {Object.keys(config.servers).map(tag => (
+                      <option key={tag} value={tag}>{tag === 'default' ? 'default (base url)' : tag}</option>
+                    ))}
+                  </select>
+                  <button className="btn btn-ghost" style={{ padding: '8px 12px' }} onClick={handleAddTag}>
+                    + Add Tag
+                  </button>
+                </div>
+                
+                {currentServer && (
+                  <div className={`mode-banner ${currentServer.readFileMode ? 'cache-mode' : 'proxy-mode'}`}>
+                    <span style={{ fontSize: 18 }}>{currentServer.readFileMode ? '💾' : '🔀'}</span>
+                    {currentServer.readFileMode
+                      ? <>Cache Mode — reading from <code style={{ marginLeft: 4 }}>mock/{hostname ?? '_default'}/</code></>
+                      : `Proxy Mode — forwarding to ${currentServer.url || '(no URL set)'}`}
+                  </div>
+                )}
               </div>
             );
           })()}
@@ -141,12 +185,12 @@ export default function ConfigDashboard() {
               Retry
             </button>
           </div>
-        ) : config ? (
+        ) : config && config.servers[targetTag] ? (
           <div>
-            {tab === 'general'  && <ServerSettings config={config} onSave={handleConfigChange} />}
-            {tab === 'validate' && <ValidateRules config={config} onSave={handleConfigChange} onToast={showToast} />}
-            {tab === 'session'  && <SessionHeaders config={config} onSave={handleConfigChange} onToast={showToast} />}
-            {tab === 'cache'    && <MockManager onToast={showToast} />}
+            {tab === 'general'  && <ServerSettings config={config} targetTag={targetTag} onSave={handleConfigChange} />}
+            {tab === 'validate' && <ValidateRules config={config} targetTag={targetTag} onSave={handleConfigChange} onToast={showToast} />}
+            {tab === 'session'  && <SessionHeaders config={config} targetTag={targetTag} onSave={handleConfigChange} onToast={showToast} />}
+            {tab === 'cache'    && <MockManager config={config} targetTag={targetTag} onToast={showToast} />}
           </div>
         ) : null}
       </div>

@@ -25,17 +25,19 @@ export interface ValidateRule {
   fallback?: boolean;
 }
 
+export interface ServerConfig {
+  /** Base URL of the upstream service — used in Proxy Mode */
+  url: string;
+  /** true → serve from cache; false → proxy to upstream and cache responses */
+  readFileMode: boolean;
+  /** Per-route rules for cache key building and fallback behaviour */
+  validate: ValidateRule[];
+  /** Request headers forwarded to the upstream (e.g. "authorization") */
+  session: string[];
+}
+
 export interface AppConfig {
-  server: {
-    /** Base URL of the upstream service — used in Proxy Mode */
-    url: string;
-    /** true → serve from cache; false → proxy to upstream and cache responses */
-    readFileMode: boolean;
-    /** Per-route rules for cache key building and fallback behaviour */
-    validate: ValidateRule[];
-    /** Request headers forwarded to the upstream (e.g. "authorization") */
-    session: string[];
-  };
+  servers: Record<string, ServerConfig>;
 }
 
 // ─── Cache file structure ────────────────────────────────────────────────────

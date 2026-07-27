@@ -5,6 +5,7 @@ import { configApi, type AppConfig, type ValidateRule } from '@/lib/api';
 
 interface Props {
   config: AppConfig;
+  targetTag: string;
   onSave: (next: AppConfig) => Promise<void>;
   onToast: (msg: string, type?: 'success' | 'error') => void;
 }
@@ -170,7 +171,7 @@ function RuleRow({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ValidateRules({ config, onSave, onToast }: Props) {
+export default function ValidateRules({ config, targetTag, onSave, onToast }: Props) {
   const [newName,    setNewName]    = useState('');
   const [newParams,  setNewParams]  = useState('');
   const [newQMode,   setNewQMode]   = useState<QMode>('all');
@@ -178,7 +179,8 @@ export default function ValidateRules({ config, onSave, onToast }: Props) {
   const [newFallback,setNewFallback]= useState(false);
   const [adding,     setAdding]     = useState(false);
 
-  const rules = config.server.validate;
+  const currentServer = config.servers[targetTag];
+  const rules = currentServer?.validate || [];
 
   async function handleAdd() {
     const name = newName.trim();
@@ -196,8 +198,11 @@ export default function ValidateRules({ config, onSave, onToast }: Props) {
 
     setAdding(true);
     try {
-      const result = await configApi.addValidateRule(rule);
-      await onSave(result.config);
+      const updatedRules = [...rules, rule];
+      await onSave({
+        ...config,
+        servers: { ...config.servers, [targetTag]: { ...currentServer, validate: updatedRules } }
+      });
       setNewName(''); setNewParams(''); setNewQParams(''); setNewQMode('all'); setNewFallback(false);
       onToast('Rule added ✓');
     } catch {
@@ -209,15 +214,22 @@ export default function ValidateRules({ config, onSave, onToast }: Props) {
 
   async function handleRemove(index: number) {
     try {
-      const result = await configApi.removeValidateRule(index);
-      await onSave(result.config);
+      const updatedRules = rules.filter((_, i) => i !== index);
+      await onSave({
+        ...config,
+        servers: { ...config.servers, [targetTag]: { ...currentServer, validate: updatedRules } }
+      });
       onToast('Rule removed');
     } catch { onToast('Failed to remove rule', 'error'); }
   }
 
   async function handleUpdate(index: number, updated: ValidateRule) {
-    const result = await configApi.updateValidateRule(index, updated);
-    await onSave(result.config);
+    const updatedRules = [...rules];
+    updatedRules[index] = updated;
+    await onSave({
+      ...config,
+      servers: { ...config.servers, [targetTag]: { ...currentServer, validate: updatedRules } }
+    });
   }
 
   return (

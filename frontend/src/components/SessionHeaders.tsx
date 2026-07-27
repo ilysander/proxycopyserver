@@ -5,15 +5,17 @@ import { configApi, type AppConfig } from '@/lib/api';
 
 interface Props {
   config: AppConfig;
+  targetTag: string;
   onSave: (next: AppConfig) => Promise<void>;
   onToast: (msg: string, type?: 'success' | 'error') => void;
 }
 
-export default function SessionHeaders({ config, onSave, onToast }: Props) {
+export default function SessionHeaders({ config, targetTag, onSave, onToast }: Props) {
   const [newHeader, setNewHeader] = useState('');
   const [adding, setAdding]       = useState(false);
 
-  const headers = config.server.session;
+  const currentServer = config.servers[targetTag];
+  const headers = currentServer?.session || [];
 
   async function handleAdd() {
     const header = newHeader.trim().toLowerCase();
@@ -22,8 +24,11 @@ export default function SessionHeaders({ config, onSave, onToast }: Props) {
 
     setAdding(true);
     try {
-      const result = await configApi.addSessionHeader(header);
-      await onSave(result.config);
+      const updatedHeaders = [...headers, header];
+      await onSave({
+        ...config,
+        servers: { ...config.servers, [targetTag]: { ...currentServer, session: updatedHeaders } }
+      });
       setNewHeader('');
       onToast('Header added ✓');
     } catch {
@@ -35,8 +40,11 @@ export default function SessionHeaders({ config, onSave, onToast }: Props) {
 
   async function handleRemove(index: number) {
     try {
-      const result = await configApi.removeSessionHeader(index);
-      await onSave(result.config);
+      const updatedHeaders = headers.filter((_, i) => i !== index);
+      await onSave({
+        ...config,
+        servers: { ...config.servers, [targetTag]: { ...currentServer, session: updatedHeaders } }
+      });
       onToast('Header removed');
     } catch {
       onToast('Failed to remove header', 'error');

@@ -1,23 +1,37 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { AppConfig } from '@/lib/api';
 
 interface Props {
   config: AppConfig;
+  targetTag: string;
   onSave: (next: AppConfig) => Promise<void>;
 }
 
-export default function ServerSettings({ config, onSave }: Props) {
-  const [url, setUrl]       = useState(config.server.url);
-  const [mode, setMode]     = useState(config.server.readFileMode);
+export default function ServerSettings({ config, targetTag, onSave }: Props) {
+  const currentServer = config.servers[targetTag];
+  const [url, setUrl]       = useState(currentServer.url);
+  const [mode, setMode]     = useState(currentServer.readFileMode);
   const [saving, setSaving] = useState(false);
 
-  const isDirty = url !== config.server.url || mode !== config.server.readFileMode;
+  // Sync state when targetTag changes
+  useEffect(() => {
+    setUrl(config.servers[targetTag]?.url || '');
+    setMode(config.servers[targetTag]?.readFileMode || false);
+  }, [targetTag, config.servers]);
+
+  const isDirty = url !== currentServer.url || mode !== currentServer.readFileMode;
 
   async function handleSave() {
     setSaving(true);
-    await onSave({ ...config, server: { ...config.server, url, readFileMode: mode } });
+    await onSave({
+      ...config,
+      servers: {
+        ...config.servers,
+        [targetTag]: { ...currentServer, url, readFileMode: mode }
+      }
+    });
     setSaving(false);
   }
 
@@ -43,7 +57,9 @@ export default function ServerSettings({ config, onSave }: Props) {
         <span style={{ color: 'var(--text-2)' }}>
           Point your client at&nbsp;
           <code style={{ color: 'var(--accent)' }}>
-            {process.env.NEXT_PUBLIC_PROXY_URL ?? 'http://localhost:3000/proxy'}/&lt;your-path&gt;
+            {process.env.NEXT_PUBLIC_PROXY_URL ?? 'http://localhost:3000/proxy'}
+            {targetTag === 'default' ? '' : `/@${targetTag}`}
+            /&lt;your-path&gt;
           </code>
         </span>
       </div>

@@ -3,6 +3,7 @@ import morgan from 'morgan';
 import cors from 'cors';
 import configRoutes from './routes/config.routes';
 import { handleProxyRequest } from './proxy';
+import { RECORDINGS_DIR } from './config';
 
 const app = express();
 
@@ -20,6 +21,11 @@ app.set('json spaces', 2);
 
 // Own REST API for the config panel
 app.use('/api', configRoutes);
+
+// Locally captured call-recording audio (see proxy.ts captureRecordingUrls) —
+// serves .wav/.mp3 files saved from real S3 presigned URLs so replays never
+// depend on an (expiring) signature again.
+app.use('/recordings', express.static(RECORDINGS_DIR));
 
 // Proxy catch-all — only intercepts traffic under /proxy/*
 // This avoids any conflict with /api/* or any future own routes.

@@ -6,18 +6,21 @@ import type { AppConfig } from './types';
 
 const BACKEND_ROOT = path.join(__dirname, '..');
 
-export const CONFIG_PATH = path.join(BACKEND_ROOT, 'config.json');
-export const MOCK_DIR    = path.join(BACKEND_ROOT, 'mock');
+export const CONFIG_PATH     = path.join(BACKEND_ROOT, 'config.json');
+export const MOCK_DIR        = path.join(BACKEND_ROOT, 'mock');
+export const RECORDINGS_DIR  = path.join(MOCK_DIR, '_recordings');
 
 // ─── Defaults ─────────────────────────────────────────────────────────────────
 
 const DEFAULT_CONFIG: AppConfig = {
-  server: {
-    url: '',
-    readFileMode: true,
-    validate: [],
-    session: ['authorization'],
-  },
+  servers: {
+    default: {
+      url: '',
+      readFileMode: true,
+      validate: [],
+      session: ['authorization'],
+    }
+  }
 };
 
 // ─── Persistence ──────────────────────────────────────────────────────────────
@@ -26,7 +29,13 @@ export function loadConfig(): AppConfig {
   try {
     if (fs.existsSync(CONFIG_PATH)) {
       const raw = fs.readFileSync(CONFIG_PATH, 'utf8');
-      return JSON.parse(raw) as AppConfig;
+      const parsed = JSON.parse(raw);
+      // Migrate legacy `server` config to `servers.default`
+      if (parsed.server && !parsed.servers) {
+        parsed.servers = { default: parsed.server };
+        delete parsed.server;
+      }
+      return parsed as AppConfig;
     }
   } catch (err) {
     console.warn('[config] Could not load config.json — using defaults:', err);

@@ -12,13 +12,15 @@ export interface ValidateRule {
   fallback?: boolean;
 }
 
+export interface ServerConfig {
+  url: string;
+  readFileMode: boolean;
+  validate: ValidateRule[];
+  session: string[];
+}
+
 export interface AppConfig {
-  server: {
-    url: string;
-    readFileMode: boolean;
-    validate: ValidateRule[];
-    session: string[];
-  };
+  servers: Record<string, ServerConfig>;
 }
 
 export interface MockFileEntry {
